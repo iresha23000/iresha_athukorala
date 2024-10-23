@@ -1,0 +1,94 @@
+import google.generativeai as genai
+from PIL import Image
+import os
+
+def configure_api():
+    """Configure the Google Generative AI client using the API key from environment variables."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("API key not found. Please set the GEMINI_API_KEY environment variable.")
+    genai.configure(api_key=api_key)
+    print("API configured successfully.")
+
+def load_and_describe_images(image_paths):
+    """Load images from the provided file paths and prompt the user to describe them."""
+    images = []
+    descriptions = []
+    
+    for idx, path in enumerate(image_paths):
+        try:
+            # Attempt to open the image
+            image = Image.open(path)
+            images.append(image)
+            
+            print(f"\nImage {idx+1}: {image.filename}")
+            print(f"Format: {image.format}, Size: {image.size}")
+            
+            # Prompt the user for a description of the image
+            description = input(f"Describe Image {idx+1} (e.g., product type, features, style): ").strip()
+            
+            if description:
+                descriptions.append(description)
+            else:
+                print("No description provided for this image. Skipping...")
+
+        except FileNotFoundError:
+            print(f"File not found: {path}. Skipping...")
+        except Exception as e:
+            print(f"Error loading image '{path}': {e}")
+    
+    return images, descriptions
+
+def generate_slogans_from_descriptions(descriptions):
+    """Generate advertising slogans based on image descriptions."""
+    if not descriptions:
+        print("No descriptions available to generate slogans.")
+        return None
+
+    print("\nGenerating slogans based on the descriptions...")
+    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+
+    # Prepare the prompt by incorporating the descriptions
+    prompt = ["Create advertising slogans for the following products based on these descriptions:"]
+    prompt.extend(descriptions)
+
+    try:
+        # Generate content using the model
+        response = model.generate_content("\n".join(prompt))
+        return response.text.strip()
+    except Exception as e:
+        print(f"Error generating slogans: {e}")
+        return None
+
+def main():
+    try:
+        # Configure API
+        configure_api()
+
+        # Get image file paths from the user
+        image_paths = input("Enter the file paths of images (comma-separated): ").split(',')
+        image_paths = [path.strip() for path in image_paths]  # Clean up any leading/trailing spaces
+
+        if not image_paths:
+            print("No image paths provided. Exiting.")
+            return
+        
+        # Load images and collect descriptions
+        images, descriptions = load_and_describe_images(image_paths)
+
+        # Generate and display slogans if descriptions were provided
+        if descriptions:
+            slogans = generate_slogans_from_descriptions(descriptions)
+            if slogans:
+                print("\nGenerated Slogans:")
+                print(slogans)
+            else:
+                print("Failed to generate slogans.")
+        else:
+            print("No descriptions available. No slogans generated.")
+    
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+if __name__ == "__main__":
+    main()
