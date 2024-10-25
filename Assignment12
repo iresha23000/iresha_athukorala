@@ -1,0 +1,85 @@
+import streamlit as st
+from langchain.prompts import PromptTemplate
+from langchain.chains import load_chain
+from langchain_openai import ChatOpenAI
+from langchain_community.document_loaders import UnstructuredURLLoader
+from langchain_community.utilities import GoogleSerperAPIWrapper
+from langchain.chains import load_summarize_chain
+import os
+
+
+# Streamlit app title
+st.title('News Summarization')
+
+# Environment variables for API keys
+serper_api_key = os.getenv("SERPER_API_KEY")
+
+# User input for search query
+search_query = st.text_input("Enter your search term:", label_visibility="collapsed")
+
+# Dropdown for selecting the time period
+time_period = st.selectbox("Select Time Period", ["Today", "Last Week", "Last Month", "Last Year"])
+
+# Function to determine the time range for the API call
+def get_time_range(period):
+    if period == 'Today':
+        return "qdr:d"  # last day
+    elif period == 'Last Week':
+        return "qdr:w"  # last week
+    elif period == 'Last Month':
+        return "qdr:m"  # last month
+    elif period == 'Last Year':
+        return "qdr:y"  # last year
+
+# Search functionality
+if st.button("Search"):
+    if not search_query.strip():
+        st.error("Please provide a search term.")
+    else:
+        try:
+            with st.spinner("Fetching news..."):
+                time_range = get_time_range(time_period)
+                search = GoogleSerperAPIWrapper(type="news", tbs=time_range, serper_api_key=serper_api_key)
+                result_dict = search.results(search_query)
+
+                if not result_dict['news']:
+                    st.error(f"No search results found for: {search_query}.")
+                else:
+                    for item in result_dict['news']:
+                        st.success(f"**Title:** {item['title']}\n\n**Link:** {item['link']}\n\n**Snippet:** {item['snippet']}")
+        except Exception as e:
+            st.exception(f"Error fetching news: {e}")
+
+# Search and Summarization functionality
+if st.button("Search & Summarize"):
+    if not search_query.strip():
+        st.error("Please provide a search term.")
+    else:
+        try:
+            with st.spinner("Fetching and summarizing news..."):
+                time_range = get_time_range(time_period)
+                search = GoogleSerperAPIWrapper(type="news", tbs=time_range, serper_api_key=serper_api_key)
+                result_dict = search.results(search_query)
+
+                if not result_dict['news']:
+                    st.error(f"No search results found for: {search_query}.")
+                else:
+                    for item in result_dict['news']:
+                        loader = UnstructuredURLLoader(
+                            urls=[item['link']],
+                            ssl_verify=False,
+                            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"}
+                        )
+                        data = loader.load()
+
+                        # Initialize the ChatOpenAI module and summarize the data
+                        llm = ChatOpenAI(temperature=0)
+                        prompt_template = "Write a summary of the following in 100-150 words:\n\n{text}"
+                        prompt = PromptTemplate(template=prompt_template, input_variables=["text"])
+                        chain = load_summarize_chain(llm, chain_type="stuff", prompt=prompt)
+                        summary = chain.run(data)
+
+                        st.success(f"**Title:** {item['title']}\n\n**Link:** {item['link']}\n\n**Summary:** {summary}")
+        except Exception as e:
+            st.exception(f"Error during summarization: {e}")
+
